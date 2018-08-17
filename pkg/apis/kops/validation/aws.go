@@ -19,6 +19,7 @@ package validation
 import (
 	"strings"
 
+	"fmt"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/kops/pkg/apis/kops"
@@ -43,6 +44,8 @@ func awsValidateInstanceGroup(ig *kops.InstanceGroup) field.ErrorList {
 	allErrs = append(allErrs, awsValidateAdditionalSecurityGroups(field.NewPath("spec", "additionalSecurityGroups"), ig.Spec.AdditionalSecurityGroups)...)
 
 	allErrs = append(allErrs, awsValidateMachineType(field.NewPath(ig.GetName(), "spec", "machineType"), ig.Spec.MachineType)...)
+
+	allErrs = append(allErrs, awsValidateAMIforNVMe(field.NewPath(ig.GetName(), "spec", "machineType"), ig.Spec)...)
 
 	return allErrs
 }
@@ -77,5 +80,23 @@ func awsValidateMachineType(fieldPath *field.Path, machineType string) field.Err
 		}
 	}
 
+	return allErrs
+}
+
+func awsValidateAMIforNVMe(fieldPath *field.Path, ig kops.InstanceGroupSpec) field.ErrorList {
+	NVMe_INSTANCE_PREFIXES := []string{"P3", "C5", "M5", "H1"}
+
+	allErrs := field.ErrorList{}
+
+	for _, prefix := range NVMe_INSTANCE_PREFIXES {
+		if strings.Contains(strings.ToUpper(ig.MachineType), strings.ToUpper(prefix)) {
+			if strings.Contains(ig.Image, "jessie") {
+				errString := fmt.Sprintf("cannot use machineType %s with image based on Debian jessie.", ig.MachineType)
+				e := field.Forbidden(fieldPath, errString)
+				allErrs = append(allErrs, e)
+				continue
+			}
+		}
+	}
 	return allErrs
 }
